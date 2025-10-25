@@ -1,0 +1,4 @@
+.glow-hover:hover {
+  box-shadow: 0 0 14px 4px rgba(255, 0, 0, 0.7); /* green glow */
+  transition: box-shadow 0.2s ease-in-out;
+}
