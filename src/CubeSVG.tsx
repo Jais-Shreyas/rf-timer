@@ -5,6 +5,7 @@ type CubeFaceColors = string[][];
 interface CubeSVGProps {
   faceColors: CubeFaceColors;
   size?: number;
+  mode?: number;
 }
 
 const colorMap = new Map<string, string>([
@@ -17,12 +18,12 @@ const colorMap = new Map<string, string>([
   [" ", "transparent"],
 ]);
 
-const CubeSVG: React.FC<CubeSVGProps> = ({ faceColors, size = 30 }) => {
+const CubeSVG: React.FC<CubeSVGProps> = ({ faceColors, size = 30, mode = 3 }) => {
   return (
     <svg
-      width={size * 3}
-      height={size * 3}
-      viewBox={`0 0 ${size * 3} ${size * 3}`}
+      width={size * mode}
+      height={size * mode}
+      viewBox={`0 0 ${size * mode} ${size * mode}`}
     >
       {faceColors.map((row, i) =>
         row.map((color, j) => (
@@ -34,7 +35,7 @@ const CubeSVG: React.FC<CubeSVGProps> = ({ faceColors, size = 30 }) => {
             height={size}
             fill={colorMap.get(color) || "gray"}
             stroke="black"
-            strokeWidth={faceColors[i][j] !== " " ? 1 : 0}
+            strokeWidth={faceColors[i][j] !== " " ? 0.5 : 0}
           />
         ))
       )}

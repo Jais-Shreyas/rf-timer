@@ -1,4 +1,4 @@
-const moves = ["R ", "R\'", "R2", "L ", "L\'", "L2", "F ", "F\'", "F2", "U ", "U\'", "U2", "B ", "B\'", "B2", "D ", "D\'", "D2"];
+const moves = ["R ", "R\'", "R2", "L ", "L\'", "L2", "F ", "F\'", "F2", "B ", "B\'", "B2", "U ", "U\'", "U2", "D ", "D\'", "D2"];
 
 const Scramble = (type: number) => {
   var n = 0;
@@ -11,18 +11,33 @@ const Scramble = (type: number) => {
   let generatedScramble = [];
   generatedScramble[0] = Math.floor(Math.random() * 18);
   generatedScramble[1] = Math.floor(Math.random() * 18);
-  while (Math.floor(generatedScramble[1] / 3) === Math.floor(generatedScramble[0] / 3)) {
-    generatedScramble[1] = Math.floor(Math.random() * 18);
+  if (type == 2) {
+    while (Math.floor(generatedScramble[1] / 6) === Math.floor(generatedScramble[0] / 6)) {
+      generatedScramble[1] = Math.floor(Math.random() * 18);
+    }
+  } else if (type == 3) {
+    while (Math.floor(generatedScramble[1] / 3) === Math.floor(generatedScramble[0] / 3)) {
+      generatedScramble[1] = Math.floor(Math.random() * 18);
+    }
   }
   for (let i = 2; i < n; i++) {
     generatedScramble[i] = Math.floor(Math.random() * 18);
-    if (Math.floor(generatedScramble[i] / 3) === Math.floor(generatedScramble[i - 1] / 3)) {
-      i--;
-      continue;
-    }
-    if (Math.floor(generatedScramble[i] / 6) === Math.floor(generatedScramble[i - 2] / 6)) {
-      i--;
-      continue;
+    if (type == 2) {
+      if (Math.floor(generatedScramble[i] / 6) === Math.floor(generatedScramble[i - 1] / 6)) {
+        // avoid R2 L
+        i--;
+        continue;
+      }
+    } else if (type == 3) {
+      if (Math.floor(generatedScramble[i] / 3) === Math.floor(generatedScramble[i - 1] / 3)) {
+        // this stops R R2, R L is allowed
+        i--;
+        continue;
+      } else if ((Math.floor(generatedScramble[i] / 6) === Math.floor(generatedScramble[i - 1] / 6) && Math.floor(generatedScramble[i - 1] / 6) === Math.floor(generatedScramble[i - 2] / 6))) {
+        // this stops R L R2
+        i--;
+        continue;
+      }
     }
   }
   return generatedScramble.map(index => moves[index]);
@@ -50,7 +65,7 @@ function swap<T>(arr: T[][], x1: number, y1: number, x2: number, y2: number): vo
 }
 
 
-const getScrambledCube = (scramble: string[]): string[][][] => {
+const getScrambledCube = (scramble: string[], mode: number = 3): string[][][] => {
   var AllFaces: string[][] = [
     [" ", " ", " ", "W", "W", "W", " ", " ", " ", " ", " ", " "],
     [" ", " ", " ", "W", "W", "W", " ", " ", " ", " ", " ", " "],
@@ -62,7 +77,7 @@ const getScrambledCube = (scramble: string[]): string[][][] => {
     [" ", " ", " ", "Y", "Y", "Y", " ", " ", " ", " ", " ", " "],
     [" ", " ", " ", "Y", "Y", "Y", " ", " ", " ", " ", " ", " "],
   ]
-  
+
   scramble.forEach(turn => {
     const times: number = ((turn[1] == "\'") ? 3 : (turn[1] == "2" ? 2 : 1))
     const face = turn[0];
@@ -112,15 +127,50 @@ const getScrambledCube = (scramble: string[]): string[][][] => {
       }
     }
   });
-  const topFace: string[][] = [AllFaces[0].slice(3, 6), AllFaces[1].slice(3, 6), AllFaces[2].slice(3, 6)];
-  const leftFace: string[][] = [AllFaces[3].slice(0, 3), AllFaces[4].slice(0, 3), AllFaces[5].slice(0, 3)];
-  const rightFace: string[][] = [AllFaces[3].slice(6, 9), AllFaces[4].slice(6, 9), AllFaces[5].slice(6, 9)];
-  const backFace: string[][] = [AllFaces[3].slice(9, 12), AllFaces[4].slice(9, 12), AllFaces[5].slice(9, 12)];
-  const frontFace: string[][] = [AllFaces[3].slice(3, 6), AllFaces[4].slice(3, 6), AllFaces[5].slice(3, 6)];
-  const bottomFace: string[][] = [AllFaces[6].slice(3, 6), AllFaces[7].slice(3, 6), AllFaces[8].slice(3, 6)];
-  const differentFaces: string[][][] = [topFace, leftFace, frontFace, rightFace, backFace, bottomFace];
-  console.log(differentFaces);
-  return differentFaces;
+  if (mode == 2) {
+    const topFace: string[][] = [
+      [AllFaces[0][3], AllFaces[0][5]],
+      [AllFaces[2][3], AllFaces[2][5]]
+    ];
+    const leftFace: string[][] = [
+      [AllFaces[3][0], AllFaces[3][2]],
+      [AllFaces[5][0], AllFaces[5][2]]
+    ];
+    const frontFace: string[][] = [
+      [AllFaces[3][3], AllFaces[3][5]],
+      [AllFaces[5][3], AllFaces[5][5]]
+    ];
+    const rightFace: string[][] = [
+      [AllFaces[3][6], AllFaces[3][8]],
+      [AllFaces[5][6], AllFaces[5][8]]
+    ];
+    const backFace: string[][] = [
+      [AllFaces[3][9], AllFaces[3][11]],
+      [AllFaces[5][9], AllFaces[5][11]]
+    ];
+    const downFace: string[][] = [
+      [AllFaces[6][3], AllFaces[6][5]],
+      [AllFaces[8][3], AllFaces[8][5]]
+    ];
+    const blankFace: string[][] = [
+      [" ", " "],
+      [" ", " "]
+    ];
+    const differentFaces: string[][][] = [blankFace, topFace, leftFace, frontFace, rightFace, backFace, downFace];
+    return differentFaces;
+  } else if (mode == 3) {
+    const topFace: string[][] = [AllFaces[0].slice(3, 6), AllFaces[1].slice(3, 6), AllFaces[2].slice(3, 6)];
+    const leftFace: string[][] = [AllFaces[3].slice(0, 3), AllFaces[4].slice(0, 3), AllFaces[5].slice(0, 3)];
+    const rightFace: string[][] = [AllFaces[3].slice(6, 9), AllFaces[4].slice(6, 9), AllFaces[5].slice(6, 9)];
+    const backFace: string[][] = [AllFaces[3].slice(9, 12), AllFaces[4].slice(9, 12), AllFaces[5].slice(9, 12)];
+    const frontFace: string[][] = [AllFaces[3].slice(3, 6), AllFaces[4].slice(3, 6), AllFaces[5].slice(3, 6)];
+    const downFace: string[][] = [AllFaces[6].slice(3, 6), AllFaces[7].slice(3, 6), AllFaces[8].slice(3, 6)];
+    const blankFace: string[][] = [[" ", " ", " "], [" ", " ", " "], [" ", " ", " "]];
+    const differentFaces: string[][][] = [blankFace, topFace, leftFace, frontFace, rightFace, backFace, downFace];
+    return differentFaces;
+  } else {
+    return [];
+  }
 };
 
 export { Scramble, getScrambledCube };

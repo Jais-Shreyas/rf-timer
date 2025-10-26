@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Scramble, getScrambledCube } from "./Scramble";
 import CubeSVG from "./CubeSVG";
 import './Timer.css';
@@ -9,6 +9,61 @@ type Solve = {
   verdict: string
 };
 
+type ScrambleInputProps = {
+  scramble: string[];
+  setScramble: (s: string[]) => void;
+};
+
+const ScrambleInput = ({ scramble, setScramble }: ScrambleInputProps) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null); // define ref
+
+  return (
+    <div className="d-flex justify-content-center">
+      <textarea
+        ref={textareaRef}
+        placeholder="Enter your custom scramble"
+        value={scramble.join(" ")}
+        autoFocus={true}
+        onChange={(e) => {
+          const value = e.target.value.trim();
+          const parsedScramble: string[] = [];
+          for (let ele of value.split("")) {
+            if (["F", "R", "U", "B", "L", "D"].includes(ele)) {
+              parsedScramble.push(ele);
+            } else if (ele === "'" || ele === "2") {
+              if (parsedScramble.length === 0) continue;
+              if (parsedScramble[parsedScramble.length - 1].length === 1) {
+                parsedScramble[parsedScramble.length - 1] += ele;
+              }
+            }
+          }
+          setScramble(parsedScramble);
+          const textarea = e.target;
+          textarea.style.height = "auto";
+          textarea.style.height = textarea.scrollHeight + "px";
+        }}
+        className="text-center shadow-sm"
+        style={{
+          width: "60%",
+          maxWidth: "800px",
+          minWidth: "300px",
+          minHeight: "100px",
+          fontFamily: "monospace",
+          fontSize: "1.25rem",
+          padding: "10px 14px",
+          borderRadius: "12px",
+          border: "2px solid #ccc",
+          transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+          overflow: "hidden",
+        }}
+        onFocus={(e) => (e.target.style.borderColor = "#0d6efd")}
+        onBlur={(e) => (e.target.style.borderColor = "#ccc")}
+      />
+    </div>
+  );
+};
+
+
 export default function Timer() {
   const [time, setTime] = useState<number>(0);
   const [isRunning, setIsRunning] = useState<boolean>(false);
@@ -16,13 +71,18 @@ export default function Timer() {
   const [isReady, setIsReady] = useState<boolean>(false);
   const [hasStopped, setHasStopped] = useState<boolean>(false);
   const [holdTimeout, setHoldTimeout] = useState<number | undefined>(undefined);
-  const [holdDuration, setHoldDuration] = useState<number>(250);
-  const [solveTimes, setSolveTimes] = useState<Solve[][]>(JSON.parse(localStorage.getItem("solveTimes") || "[[], []]"));
-  const [mode, setMode] = useState<number>(3);
+  const [holdDuration, setHoldDuration] = useState<number>(localStorage.getItem("holdDuration") ? Number(localStorage.getItem("holdDuration")) : 250);
+  const [solveTimes, setSolveTimes] = useState<Solve[][]>(() => {
+    const saved = JSON.parse(localStorage.getItem("solveTimes") || "[[], []]");
+    return saved.map((solves: Solve[]) =>
+      solves.map(solve => ({ ...solve, attemptedAt: new Date(solve.attemptedAt) }))
+    );
+  });
+  const [mode, setMode] = useState<number>(localStorage.getItem("mode") ? Number(localStorage.getItem("mode")) : 3);
   const [scramble, setScramble] = useState<string[]>(Scramble(mode));
-  const [faces, setFaces] = useState<string[][][]>(() => getScrambledCube(scramble));
+  const [faces, setFaces] = useState<string[][][]>(() => getScrambledCube(scramble, mode));
   const [isSeeingSolve, setIsSeeingSolve] = useState<number>(-1);
-  const blankFace = [[" ", " ", " "], [" ", " ", " "], [" ", " ", " "]];
+  const [isUsingCustomScramble, setIsUsingCustomScramble] = useState<boolean>(false);
 
   useEffect(() => {
     let interval: number | undefined;
@@ -41,6 +101,9 @@ export default function Timer() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName.toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+
       if (isSeeingSolve !== -1) return;
       if (e.code === "Space") {
         e.preventDefault();
@@ -146,14 +209,17 @@ export default function Timer() {
     return bestTime === Infinity ? "--" : formatTime(bestTime);
   };
 
-  const ao = (n: number): string => {
-    var lastNSolves = solveTimes[mode - 2].slice(-n);
+  const ao = (n: number, timeList: Solve[]): string => {
+    console.log("timeList", timeList);
+    var lastNSolves = timeList.slice(-n);
+    console.log("lastNSolves", lastNSolves);
     if (lastNSolves.length < n) return "--";
     var dnfs = lastNSolves.filter(solve => solve.verdict === "DNF").length;
     if (dnfs >= 2) return "DNF";
     var times = lastNSolves.map(solve => solve.verdict === "DNF" ? Infinity : solve.solveTime + 2000 * (solve.verdict === "+2" ? 1 : 0)).sort((a, b) => a - b);
     var sum = times.slice(1, n - 1).reduce((a, b) => a + b);
     var average = sum / (n - 2);
+    console.log(average);
     return formatTime(average);
   }
 
@@ -201,7 +267,7 @@ export default function Timer() {
   const effectiveTextColor = theme === 'dark' ? 'text-light' : 'text-dark';
 
   useEffect(() => {
-    setFaces(getScrambledCube(scramble));
+    setFaces(getScrambledCube(scramble, mode));
   }, [scramble]);
 
   const updateStatus = (index: number, status: string) => {
@@ -213,69 +279,117 @@ export default function Timer() {
     });
   }
 
+  const downloadCSV = () => {
+    const headers = ["Attempted At", "Solve Time", "Scramble", "Verdict"];
+    const rows = solveTimes[mode - 2].slice().reverse().map(solve => [
+      new Date(solve.attemptedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }).split(',').join(''),
+      formatTime(solve.solveTime),
+      solve.scramble.join(" "),
+      solve.verdict
+    ]);
+    console.log(rows);
+    const csvContent = [headers, ...rows]
+      .map(e => e.join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `solves_${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }).split(', ').join('_').split(' ').join('')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className={`d-flex align-items-stretch min-vh-100 transition-colors ${backgroundClass}`}>
       <aside
         className={`p-3 border-end h-80 ${theme === 'dark' ? 'bg-dark text-light border-dark' : 'bg-white text-dark'}`}
-        style={{ width: 240, display: "flex", flexDirection: "column", height: "100vh" }}
+        style={{ width: 'auto', display: "flex", flexDirection: "column", height: "100vh" }}
       >
         <div className={effectiveTextColor}>Best Time: {bestTime()}</div>
         <div className={effectiveTextColor}>mo3: {mo3()}</div>
-        <div className={effectiveTextColor}>ao5: {ao(5)}</div>
-        <div className={effectiveTextColor}>ao12: {ao(12)}</div>
-        <div className={effectiveTextColor}>ao50: {ao(50)}</div>
+        <div className={effectiveTextColor}>ao5: {ao(5, solveTimes[mode - 2])}</div>
+        <div className={effectiveTextColor}>ao12: {ao(12, solveTimes[mode - 2])}</div>
+        <div className={effectiveTextColor}>ao50: {ao(50, solveTimes[mode - 2])}</div>
 
         <div className="d-flex justify-content-between align-items-center mb-3">
-          <h5 className={`mb-0 ${effectiveTextColor}`}>Solves</h5>
-          <small className={`text-muted ${effectiveTextColor}`}>{solveTimes[mode - 2].length}</small>
+          <h5 className={`mb-0 ${effectiveTextColor}`}>Solves:</h5>
+          <small
+            className={`text-muted ${effectiveTextColor}`}>
+            {solveTimes[mode - 2].filter(attempt => attempt.verdict !== "DNF").length} / {solveTimes[mode - 2].length}
+          </small>
         </div>
+        <button className="mb-2 btn btn-secondary py-2"
+          onClick={downloadCSV}
+        >
+          Save as CSV
+        </button>
 
         <div
-          className="list-group flex-grow-1"
+          className="list-group"
           style={{
-            overflowY: "auto",
+            scrollbarWidth: "none",
             msOverflowStyle: "none",
-            scrollbarWidth: "none"
+            overflowY: "hidden",
           }}
         >
-          {solveTimes[mode - 2].slice().reverse().map((element, revIndex) => (
-            <button
-              key={revIndex}
-              type="button"
-              className={`list-group-item list-group-item-action d-flex justify-content-between align-items-center ${theme === 'dark' ? 'bg-transparent text-light' : ''}`}
-              onClick={() => setIsSeeingSolve(solveTimes[mode - 2].length - revIndex - 1)}
-            >
-              <small className="text-muted">#{solveTimes[mode - 2].length - revIndex}</small>
-              <span className={effectiveTextColor}>{element.verdict === "DNF" ? "DNF" : formatTime(element.solveTime + 2000 * (element.verdict === "+2" ? 1 : 0))}{element.verdict === "+2" ? "+" : ""}</span>
-              <small
-                className="text-danger ms-3 glow-hover"
-                style={{ cursor: "pointer" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSolveTimes(prev => {
-                    const updated = [...prev];
-                    const originalIndex = updated[mode - 2].length - 1 - revIndex;
-                    updated[mode - 2] = updated[mode - 2].filter((_, i) => i !== originalIndex);
-                    localStorage.setItem("solveTimes", JSON.stringify(updated));
-                    return updated;
-                  });
-                }}
-              >
-                &times;
-              </small>
-            </button>
-          ))}
+          <div className="table-responsive">
+            <style>
+              {`.table-responsive::-webkit-scrollbar {display: none;}`}
+            </style>
+            <table className={`table table-hover align-middle text-center mb-0 ${theme === 'dark' ? 'table-dark' : ''}`}>
+              <thead>
+                <tr>
+                  <th scope="col" style={{ width: "10%" }}>#</th>
+                  <th scope="col" style={{ width: "30%" }}>Time</th>
+                  <th scope="col" style={{ width: "30%" }}>ao5</th>
+                  <th scope="col" style={{ width: "30%" }}>ao12</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...solveTimes[mode - 2]].reverse().map((element, revIndex) => {
+                  const originalIndex = solveTimes[mode - 2].length - revIndex - 1;
+                  const timeDisplay = element.verdict === "DNF"
+                    ? "DNF"
+                    : formatTime(element.solveTime + 2000 * (element.verdict === "+2" ? 1 : 0)) +
+                    (element.verdict === "+2" ? "+" : "");
+                  const ao5Display = ao(5, solveTimes[mode - 2].slice(0, originalIndex + 1));
+                  const ao12Display = ao(12, solveTimes[mode - 2].slice(0, originalIndex + 1));
+
+                  return (
+                    <tr
+                      key={revIndex}
+                      className="table-row-hover"
+                      style={{ cursor: "pointer" }}
+                      onClick={() => setIsSeeingSolve(originalIndex)}
+                    >
+                      <td className="text-muted">#{solveTimes[mode - 2].length - revIndex}</td>
+                      <td className={effectiveTextColor}>{timeDisplay}</td>
+                      <td className={effectiveTextColor}>{ao5Display}</td>
+                      <td className={effectiveTextColor}>{ao12Display}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
         </div>
       </aside>
 
 
-      <main className="flex-grow-1 d-flex flex-column align-items-center h-100 overflow-auto">
+      <main className="mt-3 flex-grow-1 d-flex flex-column align-items-center h-100 overflow-auto">
         <div className="mb-4 text-center d-flex gap-2">
           <select
             className="form-select"
             style={{ width: 140 }}
             value={mode}
-            onChange={(e) => setMode(Number(e.target.value))}
+            onChange={(e) => {
+              setMode(Number(e.target.value));
+              localStorage.setItem("mode", e.target.value);
+            }}
           >
             <option value={2}>2x2x2</option>
             <option value={3}>3x3x3</option>
@@ -284,7 +398,10 @@ export default function Timer() {
             className="form-select"
             style={{ width: 180 }}
             value={holdDuration}
-            onChange={(e) => setHoldDuration(Number(e.target.value))}
+            onChange={(e) => {
+              setHoldDuration(Number(e.target.value));
+              localStorage.setItem("holdDuration", e.target.value);
+            }}
           >
             <option value={250}>250 ms</option>
             <option value={500}>500 ms</option>
@@ -296,9 +413,45 @@ export default function Timer() {
           <button type="button" className="btn btn-outline-secondary" onClick={toggleTheme}>
             {theme === 'dark' ? 'Light' : 'Dark'} Theme
           </button>
+          <button type="button" className="btn btn-outline-success" onClick={() => setScramble(Scramble(mode))}>
+            next scramble
+          </button>
+          <label className="btn btn-primary fs-6 d-inline-flex align-items-center gap-2 mx-3">
+            <input
+              type="checkbox"
+              id="custom"
+              className="form-check-input m-0"
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setIsUsingCustomScramble(checked);
+                if (!checked) {
+                  setScramble(Scramble(mode));
+                } else {
+                  setScramble([]);
+                }
+              }}
+            />
+            Custom scramble?
+          </label>
         </div>
 
-        <div className={`fs-1 text-center mb-3 ${isRunning ? "invisible" : ""}`}>{scramble.join(" ")}</div>
+        <div className={`text-center w-100 mb-4 ${isRunning ? "invisible" : ""}`}>
+          {isUsingCustomScramble ? (
+            <ScrambleInput scramble={scramble} setScramble={setScramble} />
+          ) : (
+            <div
+              className={`fs-3 fw-semibold ${getTextColor()}`}
+              style={{
+                fontFamily: "monospace",
+                letterSpacing: "1px",
+                userSelect: "none",
+              }}
+            >
+              {scramble.join(" ")}
+            </div>
+          )}
+        </div>
+
         <h1 className={`display-1 fw-bold ${getTextColor()}`} style={{ fontSize: "10vw", fontWeight: "bold" }}>
           {formatTime(time)}
         </h1>
@@ -308,24 +461,23 @@ export default function Timer() {
             display: "grid",
             gridTemplateColumns: "repeat(4, auto)",
             gridTemplateRows: "repeat(3, auto)",
-            gap: "4px",
+            gap: "2px",
             width: "fit-content",
-            border: "1px solid black",
           }}
           className={`${isRunning ? "invisible" : ""}`}
         >
-          <CubeSVG faceColors={blankFace} size={40} />
-          <CubeSVG faceColors={faces[0]} size={40} />
-          <CubeSVG faceColors={blankFace} size={40} />
-          <CubeSVG faceColors={blankFace} size={40} />
-          <CubeSVG faceColors={faces[1]} size={40} />
-          <CubeSVG faceColors={faces[2]} size={40} />
-          <CubeSVG faceColors={faces[3]} size={40} />
-          <CubeSVG faceColors={faces[4]} size={40} />
-          <CubeSVG faceColors={blankFace} size={40} />
-          <CubeSVG faceColors={faces[5]} size={40} />
-          <CubeSVG faceColors={blankFace} size={40} />
-          <CubeSVG faceColors={blankFace} size={40} />
+          <CubeSVG faceColors={faces[0]} size={40} mode={mode} />
+          <CubeSVG faceColors={faces[1]} size={40} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={40} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={40} mode={mode} />
+          <CubeSVG faceColors={faces[2]} size={40} mode={mode} />
+          <CubeSVG faceColors={faces[3]} size={40} mode={mode} />
+          <CubeSVG faceColors={faces[4]} size={40} mode={mode} />
+          <CubeSVG faceColors={faces[5]} size={40} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={40} mode={mode} />
+          <CubeSVG faceColors={faces[6]} size={40} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={40} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={40} mode={mode} />
         </div>
 
       </main>
@@ -342,12 +494,21 @@ export default function Timer() {
             onClick={(e) => e.stopPropagation()}
           >
             <div
-              className="fs-2 text-danger"
               onClick={() => setIsSeeingSolve(-1)}
-              style={{ cursor: 'pointer' }}
+              className="d-flex justify-content-center align-items-center fs-1 text-danger mb-2 rounded-circle"
+              style={{
+                width: '40px',
+                height: '40px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+              title="Close"
+              onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.2)')}
+              onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
             >
               &times;
             </div>
+
             <h2
               style={{
                 fontFamily: "monospace",
@@ -356,13 +517,46 @@ export default function Timer() {
               }}
               className="text-monospace"
             >
-              {`Solve No. ${isSeeingSolve + 1}  Verdict:`}
-              <select value={solveTimes[mode - 2][isSeeingSolve].verdict} onChange={(e) => updateStatus(isSeeingSolve, e.target.value)}>
-                <option value="OK">OK</option>
-                <option value="DNF">DNF</option>
-                <option value="+2">+2</option>
-              </select>
-              {`\nTime: ${formatTime(solveTimes[mode - 2][isSeeingSolve].solveTime)}\n${solveTimes[mode - 2][isSeeingSolve].scramble.join(" ")}`}
+              {`Solve No. ${isSeeingSolve + 1}`}
+              <div className="d-flex align-items-center mb-2" title="Update the verdict">
+                <span className="me-2 fw-medium">Verdict:</span>
+                {["OK", "+2", "DNF"].map((status) => {
+                  const isSelected = solveTimes[mode - 2][isSeeingSolve].verdict === status;
+                  let btnClass = ((status === "OK") ? "btn-success" : ((status === "+2") ? "btn-secondary" : "btn-danger"));
+                  if (!isSelected) {
+                    btnClass = "btn-outline-" + btnClass.split('-')[1];
+                  }
+
+                  return (
+                    <button
+                      key={status}
+                      type="button"
+                      className={`btn me-1 ${btnClass}`}
+                      onClick={() => updateStatus(isSeeingSolve, status)}
+                    >
+                      {status}
+                    </button>
+                  );
+                })}
+                <button
+                  className="btn btn-danger"
+                  onClick={() => {
+                    setSolveTimes(prev => {
+                      const updated = [...prev];
+                      updated[mode - 2] = updated[mode - 2].filter((_, i) => i !== isSeeingSolve);
+                      localStorage.setItem("solveTimes", JSON.stringify(updated));
+                      return updated;
+                    });
+                    setIsSeeingSolve(-1);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+
+              {`Attempted At: ${new Date(solveTimes[mode - 2][isSeeingSolve].attemptedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`}
+              {`\nTime: ${formatTime(solveTimes[mode - 2][isSeeingSolve].solveTime)}s`}
+              {`\nScramble: ${solveTimes[mode - 2][isSeeingSolve].scramble.join(" ")}`}
             </h2>
           </div>
         </div>
