@@ -8,16 +8,18 @@
 }
 
 .timer-sidebar {
-  overflow-y: auto;
-  overflow-x: hidden;
-  height: 20vh;
-  width: 100%;
+  flex: 1;
+  height: 65vh;
+  width: auto;
+  /* overflow-y: auto; */
 }
 
-@media (min-width: 768px) {
+@media (max-width: 767px) {
   .timer-sidebar {
-    height: 74vh;
-    width: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 19vh;
+    width: 100%;
   }
 }
 
