@@ -403,7 +403,7 @@ export default function Timer() {
             </tr>
             <tr className="">
               <th data-label="" className={effectiveTextColor}>current</th>
-              <td data-label="" className={effectiveTextColor}>{formatTime(solveTimes[mode - 2][solveTimes[mode - 2].length - 1].solveTime)}</td>
+              <td data-label="" className={effectiveTextColor}>{solveTimes[mode - 2].length ? formatTime(solveTimes[mode - 2][solveTimes[mode - 2].length - 1].solveTime) : "---"}</td>
               <td data-label="" className={effectiveTextColor}>{mo3()}</td>
               <td data-label="" className={effectiveTextColor}>{ao(5, solveTimes[mode - 2])}</td>
               <td data-label="" className={effectiveTextColor}>{ao(12, solveTimes[mode - 2])}</td>
