@@ -183,7 +183,7 @@ export default function Timer() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [isRunning, isHolding, isReady, hasStopped, holdTimeout, holdDuration, time]);
+  });
 
   const formatTime = (ms: number): string => {
     const minutes = Math.floor(ms / 60000);
@@ -206,26 +206,23 @@ export default function Timer() {
         bestTime = solve.solveTime + 2000;
       }
     });
-    return bestTime === Infinity ? "--" : formatTime(bestTime);
+    return bestTime === Infinity ? "---" : formatTime(bestTime);
   };
 
   const ao = (n: number, timeList: Solve[]): string => {
-    console.log("timeList", timeList);
     var lastNSolves = timeList.slice(-n);
-    console.log("lastNSolves", lastNSolves);
-    if (lastNSolves.length < n) return "--";
+    if (lastNSolves.length < n) return "---";
     var dnfs = lastNSolves.filter(solve => solve.verdict === "DNF").length;
     if (dnfs >= 2) return "DNF";
     var times = lastNSolves.map(solve => solve.verdict === "DNF" ? Infinity : solve.solveTime + 2000 * (solve.verdict === "+2" ? 1 : 0)).sort((a, b) => a - b);
     var sum = times.slice(1, n - 1).reduce((a, b) => a + b);
     var average = sum / (n - 2);
-    console.log(average);
     return formatTime(average);
   }
 
   const mo3 = (): string => {
     var last3Solves = solveTimes[mode - 2].slice(-3);
-    if (last3Solves.length < 3) return "--";
+    if (last3Solves.length < 3) return "---";
     var penalty = 0;
     for (let i = 0; i < 3; i++) {
       if (last3Solves[i].verdict === "DNF") return "DNF";
@@ -235,6 +232,68 @@ export default function Timer() {
     var sum = times.reduce((a, b) => a + b, penalty);
     var average = sum / 3;
     return formatTime(average);
+  }
+  const bestmo3 = (): string => {
+    let best: number = Infinity;
+    let sum: number = 0;
+    let dnfs = 0;
+    for (let i = 0; i < solveTimes[mode - 2].length; i++) {
+      dnfs += (solveTimes[mode - 2][i].verdict === "DNF" ? 1 : 0);
+      sum += solveTimes[mode - 2][i].solveTime + (solveTimes[mode - 2][i].verdict === "+2" ? 2000 : 0);
+      if (i - 3 >= 0) {
+        sum -= solveTimes[mode - 2][i - 3].solveTime - (solveTimes[mode - 2][i - 3].verdict === "+2" ? 2000 : 0);
+        dnfs -= (solveTimes[mode - 2][i - 3].verdict === "DNF" ? 1 : 0);
+      }
+      if (i >= 2 && dnfs == 0) {
+        best = Math.min(best, sum / 3);
+      }
+    }
+    if (best === Infinity) return "---";
+    return formatTime(best);
+  }
+
+  const aoList = (n: number, timeList: Solve[]): { best: string, retArr: string[] } => {
+    let best: number = Infinity;
+    let dnfs = 0;
+    let plus2 = 0;
+    let timeArr = new Array<number>(n);
+    let retArr: string[] = [];
+    for (let i = 0; i < timeList.length; i++) {
+      dnfs += (timeList[i].verdict == "DNF" ? 1 : 0);
+      plus2 += (timeList[i].verdict == "+2" ? 1 : 0);
+      if (timeList[i].verdict == "DNF") {
+        timeArr[i % n] = Infinity;
+      } else {
+        timeArr[i % n] = timeList[i].solveTime + (timeList[i].verdict == "DNF" ? 2 : 0);
+      }
+      if (i - n >= 0) {
+        dnfs -= (timeList[i - n].verdict == "DNF" ? 1 : 0);
+        plus2 -= (timeList[i - n].verdict == "+2" ? 1 : 0);
+      }
+      if (i >= n - 1) {
+        if (dnfs >= 2) {
+          retArr.push("DNF");
+        } else if (dnfs == 1) {
+          let mini = Math.min(...timeArr);
+          let sum = 0;
+          for (let t of timeArr) {
+            if (t !== Infinity) sum += t;
+          }
+          retArr.push(formatTime((sum - mini) / (n - 2)));
+          best = Math.min(best, (sum - mini) / (n - 2));
+        } else {
+          let mini = Math.min(...timeArr);
+          let maxi = Math.max(...timeArr);
+          let sum = timeArr.reduce((a, b) => a + b, 0);
+          retArr.push(formatTime((sum - mini - maxi) / (n - 2)));
+          best = Math.min(best, (sum - mini - maxi) / (n - 2));
+        }
+      } else {
+        retArr.push("---");
+      }
+    }
+    if (best === Infinity) return { best: "---", retArr };
+    return { best: formatTime(best), retArr };
   }
 
   const getBackground = () => {
@@ -270,6 +329,15 @@ export default function Timer() {
     setFaces(getScrambledCube(scramble, mode));
   }, [scramble]);
 
+  useEffect(() => {
+    const setVh = () => {
+      document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
+    };
+    setVh();
+    window.addEventListener('resize', setVh);
+    return () => window.removeEventListener('resize', setVh);
+  }, []);
+
   const updateStatus = (index: number, status: string) => {
     setSolveTimes(prev => {
       const updated = [...prev];
@@ -303,43 +371,75 @@ export default function Timer() {
   };
 
   return (
-    <div className={`d-flex align-items-stretch min-vh-100 transition-colors ${backgroundClass}`}>
+    <div
+      className={`d-flex flex-column-reverse flex-md-row align-items-stretch min-vh-100 transition-colors ${backgroundClass}`}
+      style={{
+        height: "calc(var(--vh, 1vh) * 100)"
+      }}
+    >
       <aside
-        className={`p-3 border-end h-80 ${theme === 'dark' ? 'bg-dark text-light border-dark' : 'bg-white text-dark'}`}
-        style={{ width: 'auto', display: "flex", flexDirection: "column", height: "100vh" }}
+        className={`${isRunning || isReady ? "d-none" : ""} px-3 pt-3 d-flex flex-row flex-md-column border-top border-md-top-0 border-md-end 
+    ${theme === 'dark' ? 'bg-dark text-light border-dark' : 'bg-white text-dark'}`}
       >
-        <div className={effectiveTextColor}>Best Time: {bestTime()}</div>
-        <div className={effectiveTextColor}>mo3: {mo3()}</div>
-        <div className={effectiveTextColor}>ao5: {ao(5, solveTimes[mode - 2])}</div>
-        <div className={effectiveTextColor}>ao12: {ao(12, solveTimes[mode - 2])}</div>
-        <div className={effectiveTextColor}>ao50: {ao(50, solveTimes[mode - 2])}</div>
+        <table className={`table table-hover align-middle text-center mb-0 timer-stats-table ${theme === 'dark' ? 'table-dark' : ''}`}>
+          <thead>
+            <tr>
+              <th scope="col" style={{ width: "16%" }}></th>
+              <th scope="col" style={{ width: "16%" }}>time</th>
+              <th scope="col" style={{ width: "17%" }}>mo3</th>
+              <th scope="col" style={{ width: "17%" }}>ao5</th>
+              <th scope="col" style={{ width: "17%" }}>ao12</th>
+              <th scope="col" style={{ width: "17%" }}>ao50</th>
+            </tr>
+          </thead>
+          <tbody className="responsive-tbody flex-row">
+            <tr className="table-row-hover d-md-none">
+              <td data-label="&nbsp;" className={effectiveTextColor}></td>
+              <td data-label="time" className={effectiveTextColor}></td>
+              <td data-label="mo3" className={effectiveTextColor}></td>
+              <td data-label="ao5" className={effectiveTextColor}></td>
+              <td data-label="ao12" className={effectiveTextColor}></td>
+              <td data-label="ao50" className={effectiveTextColor}></td>
+            </tr>
+            <tr className="">
+              <th data-label="" className={effectiveTextColor}>current</th>
+              <td data-label="" className={effectiveTextColor}>{formatTime(solveTimes[mode - 2][solveTimes[mode - 2].length - 1].solveTime)}</td>
+              <td data-label="" className={effectiveTextColor}>{mo3()}</td>
+              <td data-label="" className={effectiveTextColor}>{ao(5, solveTimes[mode - 2])}</td>
+              <td data-label="" className={effectiveTextColor}>{ao(12, solveTimes[mode - 2])}</td>
+              <td data-label="" className={effectiveTextColor}>{ao(50, solveTimes[mode - 2])}</td>
+            </tr>
+            <tr className="">
+              <th data-label="" className={effectiveTextColor}>best</th>
+              <td data-label="" className={effectiveTextColor}>{bestTime()}</td>
+              <td data-label="" className={effectiveTextColor}>{bestmo3()}</td>
+              <td data-label="" className={effectiveTextColor}>{aoList(5, solveTimes[mode - 2]).best}</td>
+              <td data-label="" className={effectiveTextColor}>{aoList(12, solveTimes[mode - 2]).best}</td>
+              <td data-label="" className={effectiveTextColor}>{aoList(50, solveTimes[mode - 2]).best}</td>
+            </tr>
+          </tbody>
+        </table>
 
-        <div className="d-flex justify-content-between align-items-center mb-3">
-          <h5 className={`mb-0 ${effectiveTextColor}`}>Solves:</h5>
-          <small
-            className={`text-muted ${effectiveTextColor}`}>
-            {solveTimes[mode - 2].filter(attempt => attempt.verdict !== "DNF").length} / {solveTimes[mode - 2].length}
-          </small>
-        </div>
-        <button className="mb-2 btn btn-secondary py-2"
-          onClick={downloadCSV}
-        >
-          Save as CSV
-        </button>
+        <div className="w-100" style={{ display: "block" }}>
+          <div className="d-flex justify-content-between align-items-center mb-3 mt-md-3">
+            <h5 className={`mb-0 ${effectiveTextColor}`}>Solves:</h5>
+            <small className={`fw-bold fs-6`}>
+              {solveTimes[mode - 2].filter(attempt => attempt.verdict !== "DNF").length} / {solveTimes[mode - 2].length}
+            </small>
+            <button
+              className="btn btn-secondary py-2 w-1"
+              onClick={downloadCSV}
+              title="Save as CSV file"
+            >
+              Save
+            </button>
+          </div>
 
-        <div
-          className="list-group"
-          style={{
-            scrollbarWidth: "none",
-            msOverflowStyle: "none",
-            overflowY: "hidden",
-          }}
-        >
-          <div className="table-responsive">
-            <style>
-              {`.table-responsive::-webkit-scrollbar {display: none;}`}
-            </style>
-            <table className={`table table-hover align-middle text-center mb-0 ${theme === 'dark' ? 'table-dark' : ''}`}>
+          <div className="table-responsive timer-sidebar list-group">
+            <table
+              className={`table table-hover align-middle text-center ${theme === "dark" ? "table-dark" : ""
+                }`}
+            >
               <thead>
                 <tr>
                   <th scope="col" style={{ width: "10%" }}>#</th>
@@ -349,112 +449,149 @@ export default function Timer() {
                 </tr>
               </thead>
               <tbody>
-                {[...solveTimes[mode - 2]].reverse().map((element, revIndex) => {
-                  const originalIndex = solveTimes[mode - 2].length - revIndex - 1;
-                  const timeDisplay = element.verdict === "DNF"
-                    ? "DNF"
-                    : formatTime(element.solveTime + 2000 * (element.verdict === "+2" ? 1 : 0)) +
-                    (element.verdict === "+2" ? "+" : "");
-                  const ao5Display = ao(5, solveTimes[mode - 2].slice(0, originalIndex + 1));
-                  const ao12Display = ao(12, solveTimes[mode - 2].slice(0, originalIndex + 1));
+                {(() => {
+                  const solves = solveTimes[mode - 2];
+                  const { retArr: ao5Arr } = aoList(5, solves);
+                  const { retArr: ao12Arr } = aoList(12, solves);
 
-                  return (
-                    <tr
-                      key={revIndex}
-                      className="table-row-hover"
-                      style={{ cursor: "pointer" }}
-                      onClick={() => setIsSeeingSolve(originalIndex)}
-                    >
-                      <td className="text-muted">#{solveTimes[mode - 2].length - revIndex}</td>
-                      <td className={effectiveTextColor}>{timeDisplay}</td>
-                      <td className={effectiveTextColor}>{ao5Display}</td>
-                      <td className={effectiveTextColor}>{ao12Display}</td>
-                    </tr>
-                  );
-                })}
+                  return [...solves].reverse().map((element, revIndex) => {
+                    const originalIndex = solves.length - revIndex - 1;
+
+                    const timeDisplay =
+                      element.verdict === "DNF"
+                        ? "DNF"
+                        : formatTime(
+                          element.solveTime + (element.verdict === "+2" ? 2000 : 0)
+                        ) + (element.verdict === "+2" ? "+" : "");
+
+                    const ao5Display = ao5Arr[originalIndex];
+                    const ao12Display = ao12Arr[originalIndex];
+
+                    return (
+                      <tr
+                        key={revIndex}
+                        className="table-row-hover"
+                        style={{ cursor: "pointer" }}
+                        onClick={() => setIsSeeingSolve(originalIndex)}
+                      >
+                        <td className="text-muted">#{solves.length - revIndex}</td>
+                        <td className={effectiveTextColor}>{timeDisplay}</td>
+                        <td className={effectiveTextColor}>{ao5Display}</td>
+                        <td className={effectiveTextColor}>{ao12Display}</td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>
-
         </div>
       </aside>
 
 
-      <main className="mt-3 flex-grow-1 d-flex flex-column align-items-center h-100 overflow-auto">
-        <div className="mb-4 text-center d-flex gap-2">
-          <select
-            className="form-select"
-            style={{ width: 140 }}
-            value={mode}
-            onChange={(e) => {
-              setMode(Number(e.target.value));
-              localStorage.setItem("mode", e.target.value);
-            }}
-          >
-            <option value={2}>2x2x2</option>
-            <option value={3}>3x3x3</option>
-          </select>
-          <select
-            className="form-select"
-            style={{ width: 180 }}
-            value={holdDuration}
-            onChange={(e) => {
-              setHoldDuration(Number(e.target.value));
-              localStorage.setItem("holdDuration", e.target.value);
-            }}
-          >
-            <option value={250}>250 ms</option>
-            <option value={500}>500 ms</option>
-            <option value={750}>750 ms</option>
-            <option value={1000}>1000 ms</option>
-            <option value={1250}>1250 ms</option>
-            <option value={1500}>1500 ms</option>
-          </select>
-          <button type="button" className="btn btn-outline-secondary" onClick={toggleTheme}>
-            {theme === 'dark' ? 'Light' : 'Dark'} Theme
-          </button>
-          <button type="button" className="btn btn-outline-success" onClick={() => setScramble(Scramble(mode))}>
-            next scramble
-          </button>
-          <label className="btn btn-primary fs-6 d-inline-flex align-items-center gap-2 mx-3">
-            <input
-              type="checkbox"
-              id="custom"
-              className="form-check-input m-0"
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setIsUsingCustomScramble(checked);
-                if (!checked) {
-                  setScramble(Scramble(mode));
-                } else {
-                  setScramble([]);
-                }
-              }}
-            />
-            Custom scramble?
-          </label>
-        </div>
+      <main className={`flex-grow-1 d-flex flex-column align-items-center overflow-auto ${isRunning || isReady ? "justify-content-center" : "justify-content-between"}`}>
+        <div className={`d-flex flex-column align-items-center py-3`}>
+          <div className={`${isRunning || isReady ? "d-none" : ""} mb-4 text-center d-flex flex-column flex-md-row align-items-center justify-content-center gap-2`}>
+            <div className="d-flex gap-2">
+              <select
+                className="form-select"
+                title="Select cube type"
+                value={mode}
+                onChange={(e) => {
+                  setMode(Number(e.target.value));
+                  localStorage.setItem("mode", e.target.value);
+                }}
+              >
+                <option value={2}>2x2x2</option>
+                <option value={3}>3x3x3</option>
+              </select>
 
-        <div className={`text-center w-100 mb-4 ${isRunning ? "invisible" : ""}`}>
-          {isUsingCustomScramble ? (
-            <ScrambleInput scramble={scramble} setScramble={setScramble} />
-          ) : (
-            <div
-              className={`fs-3 fw-semibold ${getTextColor()}`}
-              style={{
-                fontFamily: "monospace",
-                letterSpacing: "1px",
-                userSelect: "none",
-              }}
-            >
-              {scramble.join(" ")}
+              <select
+                className="form-select"
+                title="Time to hold before starting."
+                value={holdDuration}
+                onChange={(e) => {
+                  setHoldDuration(Number(e.target.value));
+                  localStorage.setItem("holdDuration", e.target.value);
+                }}
+              >
+                <option value={250}>250 ms</option>
+                <option value={500}>500 ms</option>
+                <option value={750}>750 ms</option>
+                <option value={1000}>1000 ms</option>
+                <option value={1250}>1250 ms</option>
+                <option value={1500}>1500 ms</option>
+              </select>
             </div>
-          )}
-        </div>
 
-        <h1 className={`display-1 fw-bold ${getTextColor()}`} style={{ fontSize: "10vw", fontWeight: "bold" }}>
-          {formatTime(time)}
+            <div className="d-flex gap-2">
+              <button
+                type="button"
+                title="Change theme."
+                className="btn btn-outline-secondary"
+                onClick={toggleTheme}
+              >
+                {theme === "dark" ? "Light" : "Dark"} Theme
+              </button>
+
+              <button
+                type="button"
+                title="Generate a new scramble."
+                className="btn btn-outline-success"
+                onClick={() => setScramble(Scramble(mode))}
+              >
+                Next Scramble
+              </button>
+            </div>
+
+            <label title="Allows you to enter your own scrmable, visualise and solve." className="btn btn-primary fs-6 d-inline-flex align-items-center gap-2 mx-md-3">
+              <input
+                type="checkbox"
+                id="custom"
+                className="form-check-input"
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setIsUsingCustomScramble(checked);
+                  if (!checked) {
+                    setScramble(Scramble(mode));
+                  } else {
+                    setScramble([]);
+                  }
+                }}
+              />
+              Custom Scramble?
+            </label>
+          </div>
+
+
+          <div className={`${isRunning || isReady ? "d-none" : ""} text-center w-100 -4 ${isRunning ? "invisible" : ""}`}>
+            {isUsingCustomScramble ? (
+              <ScrambleInput scramble={scramble} setScramble={setScramble} />
+            ) : (
+              <div
+                className={`fs-3 fw-semibold px-3 ${getTextColor()}`}
+                style={{
+                  fontFamily: "monospace",
+                  letterSpacing: "1px",
+                  userSelect: "none",
+                  fontWeight: "bold"
+                }}
+              >
+                {scramble.join(" ")}
+              </div>
+            )}
+          </div>
+        </div>
+        <h1
+          className={`fw-bold ${getTextColor()}`}
+          style={{
+            fontSize: '10vw', userSelect: "none",
+            fontFamily: "monospace",
+          }}
+        >
+          {isRunning ? formatTime(time).slice(0, -1) : formatTime(time)}
         </h1>
+
 
         <div
           style={{
@@ -464,20 +601,20 @@ export default function Timer() {
             gap: "2px",
             width: "fit-content",
           }}
-          className={`${isRunning ? "invisible" : ""}`}
+          className={`${isRunning || isReady ? "d-none" : ""} ms-auto me-4 mb-4 ${isRunning ? "invisible" : ""}`}
         >
-          <CubeSVG faceColors={faces[0]} size={40} mode={mode} />
-          <CubeSVG faceColors={faces[1]} size={40} mode={mode} />
-          <CubeSVG faceColors={faces[0]} size={40} mode={mode} />
-          <CubeSVG faceColors={faces[0]} size={40} mode={mode} />
-          <CubeSVG faceColors={faces[2]} size={40} mode={mode} />
-          <CubeSVG faceColors={faces[3]} size={40} mode={mode} />
-          <CubeSVG faceColors={faces[4]} size={40} mode={mode} />
-          <CubeSVG faceColors={faces[5]} size={40} mode={mode} />
-          <CubeSVG faceColors={faces[0]} size={40} mode={mode} />
-          <CubeSVG faceColors={faces[6]} size={40} mode={mode} />
-          <CubeSVG faceColors={faces[0]} size={40} mode={mode} />
-          <CubeSVG faceColors={faces[0]} size={40} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={30} mode={mode} />
+          <CubeSVG faceColors={faces[1]} size={30} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={30} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={30} mode={mode} />
+          <CubeSVG faceColors={faces[2]} size={30} mode={mode} />
+          <CubeSVG faceColors={faces[3]} size={30} mode={mode} />
+          <CubeSVG faceColors={faces[4]} size={30} mode={mode} />
+          <CubeSVG faceColors={faces[5]} size={30} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={30} mode={mode} />
+          <CubeSVG faceColors={faces[6]} size={30} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={30} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={30} mode={mode} />
         </div>
 
       </main>
@@ -490,25 +627,37 @@ export default function Timer() {
         >
           <div
             className="bg-white p-4 border rounded shadow"
-            style={{ zIndex: 1050, maxWidth: "60vw" }}
+            style={{ zIndex: 1050, maxWidth: "80vw" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div
-              onClick={() => setIsSeeingSolve(-1)}
-              className="d-flex justify-content-center align-items-center fs-1 text-danger mb-2 rounded-circle"
-              style={{
-                width: '40px',
-                height: '40px',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-              title="Close"
-              onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.2)')}
-              onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-            >
-              &times;
-            </div>
-
+            <span className="d-flex justify-content-between">
+              <div
+                onClick={() => setIsSeeingSolve(-1)}
+                className="d-flex justify-content-center align-items-center fs-1 text-danger mb-2 rounded-circle"
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                title="Close"
+                onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.2)')}
+                onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+              >
+                &times;
+              </div>
+              <button
+                className="btn btn-outline-success"
+                title="Copy the statistics for this solve"
+                onClick={() => {
+                  navigator.clipboard.writeText(`Solve No. ${isSeeingSolve + 1}
+Attempted At: ${new Date(solveTimes[mode - 2][isSeeingSolve].attemptedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+Time: ${formatTime(solveTimes[mode - 2][isSeeingSolve].solveTime)}s
+Scramble: ${solveTimes[mode - 2][isSeeingSolve].scramble.join(" ")}
+Verdict: ${solveTimes[mode - 2][isSeeingSolve].verdict}`);
+                }}
+              >Copy statistics</button>
+            </span>
             <h2
               style={{
                 fontFamily: "monospace",
@@ -518,40 +667,52 @@ export default function Timer() {
               className="text-monospace"
             >
               {`Solve No. ${isSeeingSolve + 1}`}
-              <div className="d-flex align-items-center mb-2" title="Update the verdict">
-                <span className="me-2 fw-medium">Verdict:</span>
-                {["OK", "+2", "DNF"].map((status) => {
-                  const isSelected = solveTimes[mode - 2][isSeeingSolve].verdict === status;
-                  let btnClass = ((status === "OK") ? "btn-success" : ((status === "+2") ? "btn-secondary" : "btn-danger"));
-                  if (!isSelected) {
-                    btnClass = "btn-outline-" + btnClass.split('-')[1];
-                  }
+              <div
+                className="d-flex flex-column flex-md-row align-items-start align-items-md-center mb-2"
+                title="Update the verdict"
+              >
+                <div className="d-flex flex-column flex-md-row gap-2 w-100 w-md-auto">
+                  <span className="me-md-2 fw-medium mb-2 mb-md-0">Verdict:</span>
+                  {["OK", "+2", "DNF"].map((status) => {
+                    const isSelected = solveTimes[mode - 2][isSeeingSolve].verdict === status;
+                    let btnClass =
+                      status === "OK"
+                        ? "btn-success"
+                        : status === "+2"
+                          ? "btn-secondary"
+                          : "btn-danger";
+                    if (!isSelected) btnClass = "btn-outline-" + btnClass.split("-")[1];
 
-                  return (
-                    <button
-                      key={status}
-                      type="button"
-                      className={`btn me-1 ${btnClass}`}
-                      onClick={() => updateStatus(isSeeingSolve, status)}
-                    >
-                      {status}
-                    </button>
-                  );
-                })}
-                <button
-                  className="btn btn-danger"
-                  onClick={() => {
-                    setSolveTimes(prev => {
-                      const updated = [...prev];
-                      updated[mode - 2] = updated[mode - 2].filter((_, i) => i !== isSeeingSolve);
-                      localStorage.setItem("solveTimes", JSON.stringify(updated));
-                      return updated;
-                    });
-                    setIsSeeingSolve(-1);
-                  }}
-                >
-                  Delete
-                </button>
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        className={`btn ${btnClass} flex-fill flex-md-auto`}
+                        onClick={() => {
+                          updateStatus(isSeeingSolve, status);
+                          setIsSeeingSolve(-1);
+                        }}
+                      >
+                        {status}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    className="btn btn-outline-danger flex-fill flex-md-auto"
+                    onClick={() => {
+                      setSolveTimes((prev) => {
+                        const updated = [...prev];
+                        updated[mode - 2] = updated[mode - 2].filter((_, i) => i !== isSeeingSolve);
+                        localStorage.setItem("solveTimes", JSON.stringify(updated));
+                        return updated;
+                      });
+                      setIsSeeingSolve(-1);
+                    }}
+                  >
+                    Delete ?
+                  </button>
+                </div>
               </div>
 
               {`Attempted At: ${new Date(solveTimes[mode - 2][isSeeingSolve].attemptedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`}

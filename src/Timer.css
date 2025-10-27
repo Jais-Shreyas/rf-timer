@@ -1,4 +1,61 @@
 .glow-hover:hover {
-  box-shadow: 0 0 14px 4px rgba(255, 0, 0, 0.7); /* green glow */
+  box-shadow: 0 0 14px 4px rgba(255, 0, 0, 0.7);
   transition: box-shadow 0.2s ease-in-out;
+}
+
+.table-responsive::-webkit-scrollbar {
+  display: none;
+}
+
+.timer-sidebar {
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: 20vh;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .timer-sidebar {
+    height: 74vh;
+    width: auto;
+  }
+}
+
+.timer-stats-table {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .timer-stats-table thead {
+    display: none;
+    /* hide the header row */
+  }
+
+  .timer-stats-table tbody tr {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    margin-bottom: 10px;
+  }
+
+  .timer-stats-table td {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+  }
+
+  .timer-stats-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .responsive-tbody {
+    display: flex !important;
+    flex-direction: row !important;
+  }
 }
