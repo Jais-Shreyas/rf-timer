@@ -1,11 +1,14 @@
-import Timer from './Timer'
-function App() {
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Home from "./Timer";
+import Solver from "./Solver";
 
+export default function App() {
   return (
-    <>
-      <Timer />
-    </>
-  )
+    <Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/solver" element={<Solver />} />
+      </Routes>
+    </Router>
+  );
 }
-
-export default App

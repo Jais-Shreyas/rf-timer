@@ -1,7 +1,9 @@
 import { useEffect, useState, useRef } from "react";
-import { Scramble, getScrambledCube } from "./Scramble";
+import { Scramble, getScrambledCube } from "./Scramble.ts";
 import CubeSVG from "./CubeSVG";
 import './Timer.css';
+import { Link } from "react-router-dom";
+import ScrambleInput from "./ScrambleInput.tsx";
 type Solve = {
   attemptedAt: Date;
   solveTime: number;
@@ -9,68 +11,13 @@ type Solve = {
   verdict: string
 };
 
-type ScrambleInputProps = {
-  scramble: string[];
-  setScramble: (s: string[]) => void;
-};
-
-const ScrambleInput = ({ scramble, setScramble }: ScrambleInputProps) => {
-  const textareaRef = useRef<HTMLTextAreaElement>(null); // define ref
-
-  return (
-    <div className="d-flex justify-content-center">
-      <textarea
-        ref={textareaRef}
-        placeholder="Enter your custom scramble"
-        value={scramble.join(" ")}
-        autoFocus={true}
-        onChange={(e) => {
-          const value = e.target.value.trim();
-          const parsedScramble: string[] = [];
-          for (let ele of value.split("")) {
-            if (["F", "R", "U", "B", "L", "D"].includes(ele)) {
-              parsedScramble.push(ele);
-            } else if (ele === "'" || ele === "2") {
-              if (parsedScramble.length === 0) continue;
-              if (parsedScramble[parsedScramble.length - 1].length === 1) {
-                parsedScramble[parsedScramble.length - 1] += ele;
-              }
-            }
-          }
-          setScramble(parsedScramble);
-          const textarea = e.target;
-          textarea.style.height = "auto";
-          textarea.style.height = textarea.scrollHeight + "px";
-        }}
-        className="text-center shadow-sm"
-        style={{
-          width: "60%",
-          maxWidth: "800px",
-          minWidth: "300px",
-          minHeight: "100px",
-          fontFamily: "monospace",
-          fontSize: "1.25rem",
-          padding: "10px 14px",
-          borderRadius: "12px",
-          border: "2px solid #ccc",
-          transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-          overflow: "hidden",
-        }}
-        onFocus={(e) => (e.target.style.borderColor = "#0d6efd")}
-        onBlur={(e) => (e.target.style.borderColor = "#ccc")}
-      />
-    </div>
-  );
-};
-
-
 export default function Timer() {
   const [time, setTime] = useState<number>(0);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isHolding, setIsHolding] = useState<boolean>(false);
   const [isReady, setIsReady] = useState<boolean>(false);
   const [hasStopped, setHasStopped] = useState<boolean>(false);
-  const [holdTimeout, setHoldTimeout] = useState<number | undefined>(undefined);
+  const holdTimeoutRef = useRef<number | null>(null);
   const [holdDuration, setHoldDuration] = useState<number>(localStorage.getItem("holdDuration") ? Number(localStorage.getItem("holdDuration")) : 250);
   const [solveTimes, setSolveTimes] = useState<Solve[][]>(() => {
     const saved = JSON.parse(localStorage.getItem("solveTimes") || "[[], []]");
@@ -99,80 +46,78 @@ export default function Timer() {
     setScramble(Scramble(mode));
   }, [mode]);
 
+  const startHold = () => {
+    if (isRunning) {
+      stopSolve();
+    } else if (!hasStopped) {
+      setIsHolding(true);
+      const timeoutId = window.setTimeout(() => {
+        setTime(0);
+        setIsReady(true);
+      }, holdDuration);
+      holdTimeoutRef.current = timeoutId;
+    }
+  };
+
+  const releaseHold = () => {
+    if (holdTimeoutRef.current) {
+      clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
+    }
+    if (hasStopped) {
+      setHasStopped(false);
+    } else if (isReady && !isRunning) {
+      setIsRunning(true);
+    }
+    setIsHolding(false);
+    setIsReady(false);
+  };
+
+  const stopSolve = () => {
+    setIsRunning(false);
+    setHasStopped(true);
+    setIsHolding(true);
+    setIsReady(false);
+
+    setSolveTimes(prev => {
+      const newSolve: Solve = { solveTime: time, scramble, attemptedAt: new Date(), verdict: "OK" };
+      const updated = [...prev];
+      updated[mode - 2] = [...updated[mode - 2], newSolve];
+      localStorage.setItem("solveTimes", JSON.stringify(updated));
+      return updated;
+    });
+    setScramble(Scramble(mode));
+  };
+
+  const resetTimer = () => {
+    setTime(0);
+    setIsRunning(false);
+    setIsHolding(false);
+    setIsReady(false);
+    setHasStopped(false);
+    if (holdTimeoutRef.current) {
+      clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
+    }
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName.toLowerCase();
       if (tag === "input" || tag === "textarea") return;
-
       if (isSeeingSolve !== -1) return;
       if (e.code === "Space") {
         e.preventDefault();
-
-        if (isRunning) {
-          setIsRunning(false);
-          setHasStopped(true);
-          setIsHolding(true);
-          setIsReady(false);
-
-          setSolveTimes(prev => {
-            const newSolve: Solve = { solveTime: time, scramble: scramble, attemptedAt: new Date(), verdict: "OK" };
-            const updated = [...prev];
-            updated[mode - 2] = [...updated[mode - 2], newSolve];
-            localStorage.setItem("solveTimes", JSON.stringify(updated));
-            return updated;
-          });
-          setScramble(Scramble(mode));
-        } else if (!hasStopped) {
-          setIsHolding(true);
-          const timeoutId = window.setTimeout(() => {
-            setTime(0);
-            setIsReady(true);
-          }, holdDuration);
-          setHoldTimeout(timeoutId);
-        }
+        startHold();
       }
-
-      else if (isRunning) {
-        setIsRunning(false);
-        setHasStopped(true);
-        setIsHolding(true);
-        setIsReady(false);
-
-        setSolveTimes(prev => {
-          const newSolve: Solve = { solveTime: time, scramble: scramble, attemptedAt: new Date(), verdict: "OK" };
-          const updated = [...prev];
-          updated[mode - 2] = [...updated[mode - 2], newSolve];
-          localStorage.setItem("solveTimes", JSON.stringify(updated));
-          return updated;
-        });
-        setScramble(Scramble(mode));
-      }
-
-      if (e.code === "Escape") {
-        setTime(0);
-        setIsRunning(false);
-        setIsHolding(false);
-        setIsReady(false);
-        setHasStopped(false);
-        if (holdTimeout) clearTimeout(holdTimeout);
-      }
+      if (e.code === "Escape") resetTimer();
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (isSeeingSolve !== -1) return;
       if (e.code === "Space") {
         e.preventDefault();
-
-        if (holdTimeout) clearTimeout(holdTimeout);
-
-        if (hasStopped) {
-          setHasStopped(false);
-        } else if (isReady && !isRunning) {
-          setIsRunning(true);
-        }
-
-        setIsHolding(false);
-        setIsReady(false);
+        releaseHold();
       }
     };
 
@@ -183,7 +128,17 @@ export default function Timer() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  });
+  }, [isSeeingSolve, isRunning, hasStopped, isReady, holdDuration, time, scramble, mode]);
+
+  const handleTouchStart = () => {
+    if (isSeeingSolve !== -1) return;
+    startHold();
+  };
+
+  const handleTouchEnd = () => {
+    if (isSeeingSolve !== -1) return;
+    releaseHold();
+  };
 
   const formatTime = (ms: number): string => {
     const minutes = Math.floor(ms / 60000);
@@ -321,6 +276,11 @@ export default function Timer() {
       return next;
     });
   };
+
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  console.log(`Width: ${width}px, Height: ${height}px`);
 
   const backgroundClass = theme === 'dark' ? 'bg-dark' : getBackground();
   const effectiveTextColor = theme === 'dark' ? 'text-light' : 'text-dark';
@@ -489,7 +449,11 @@ export default function Timer() {
       </aside>
 
 
-      <main className={`flex-grow-1 d-flex flex-column align-items-center overflow-auto ${isRunning || isReady ? "justify-content-center" : "justify-content-between"}`}>
+      <main
+        className={`flex-grow-1 d-flex flex-column align-items-center overflow-auto ${isRunning || isReady ? "justify-content-center" : "justify-content-between"}`}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <div className={`d-flex flex-column align-items-center py-3`}>
           <div className={`${isRunning || isReady ? "d-none" : ""} mb-4 text-center d-flex flex-column flex-md-row align-items-center justify-content-center gap-2`}>
             <div className="d-flex gap-2">
@@ -561,6 +525,11 @@ export default function Timer() {
               />
               Custom Scramble?
             </label>
+            <Link to="/solver">
+              <button className="btn btn-success">
+                Open Solver
+              </button>
+            </Link>
           </div>
 
 
@@ -603,18 +572,18 @@ export default function Timer() {
           }}
           className={`${isRunning || isReady ? "d-none" : ""} ms-auto me-4 mb-4 ${isRunning ? "invisible" : ""}`}
         >
-          <CubeSVG faceColors={faces[0]} size={30} mode={mode} />
-          <CubeSVG faceColors={faces[1]} size={30} mode={mode} />
-          <CubeSVG faceColors={faces[0]} size={30} mode={mode} />
-          <CubeSVG faceColors={faces[0]} size={30} mode={mode} />
-          <CubeSVG faceColors={faces[2]} size={30} mode={mode} />
-          <CubeSVG faceColors={faces[3]} size={30} mode={mode} />
-          <CubeSVG faceColors={faces[4]} size={30} mode={mode} />
-          <CubeSVG faceColors={faces[5]} size={30} mode={mode} />
-          <CubeSVG faceColors={faces[0]} size={30} mode={mode} />
-          <CubeSVG faceColors={faces[6]} size={30} mode={mode} />
-          <CubeSVG faceColors={faces[0]} size={30} mode={mode} />
-          <CubeSVG faceColors={faces[0]} size={30} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={Math.max(20, window.innerWidth / 48)} mode={mode} />
+          <CubeSVG faceColors={faces[1]} size={Math.max(20, window.innerWidth / 48)} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={Math.max(20, window.innerWidth / 48)} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={Math.max(20, window.innerWidth / 48)} mode={mode} />
+          <CubeSVG faceColors={faces[2]} size={Math.max(20, window.innerWidth / 48)} mode={mode} />
+          <CubeSVG faceColors={faces[3]} size={Math.max(20, window.innerWidth / 48)} mode={mode} />
+          <CubeSVG faceColors={faces[4]} size={Math.max(20, window.innerWidth / 48)} mode={mode} />
+          <CubeSVG faceColors={faces[5]} size={Math.max(20, window.innerWidth / 48)} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={Math.max(20, window.innerWidth / 48)} mode={mode} />
+          <CubeSVG faceColors={faces[6]} size={Math.max(20, window.innerWidth / 48)} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={Math.max(20, window.innerWidth / 48)} mode={mode} />
+          <CubeSVG faceColors={faces[0]} size={Math.max(20, window.innerWidth / 48)} mode={mode} />
         </div>
 
       </main>
