@@ -229,15 +229,15 @@ const TwobyTwoMovesList: string[] = ["F ", "F'", "F2", "R ", "R'", "R2", "U ", "
 
 let solveMoves: string[] = [];
 let isSolved: boolean = false;
-const helper2 = (cube: string[][], move: string): void => {
-  if (solveMoves.length >= 11) return;
+const helper2 = (cube: string[][], lastMove: string, depth: number): void => {
+  if (depth == 0) return;
   if (isSolved) return;
   if (checkSolved(cube, 2)) {
     isSolved = true;
     return;
   }
   for (let nextMove of TwobyTwoMovesList) {
-    if (nextMove[0] === move[0]) continue; // prevent same face moves in succession
+    if (nextMove[0] === lastMove[0]) continue; // prevent same face moves in succession
     const movefn = faceMoveMap[nextMove[0]];
     const times: number = (nextMove[1] === "'" ? 3 : (nextMove[1] === "2" ? 2 : 1));
     // make the move
@@ -245,7 +245,7 @@ const helper2 = (cube: string[][], move: string): void => {
       if (movefn) movefn(cube);
     }
     solveMoves.push(nextMove);
-    helper2(cube, nextMove);
+    helper2(cube, nextMove, depth - 1);
     if (isSolved) {
       return;
     }
@@ -260,25 +260,10 @@ const helper2 = (cube: string[][], move: string): void => {
 const solve2by2 = (cube: string[][]): string[] => {
   solveMoves = [];
   isSolved = false;
-  if (checkSolved(cube, 2)) {
-    return solveMoves;
-  }
-  for (let move of TwobyTwoMovesList) {
-    const movefn = faceMoveMap[move[0]];
-    const times: number = (move[1] === "'" ? 3 : (move[1] === "2" ? 2 : 1));
-    // make the move
-    for (let t = 0; t < times; t++) {
-      if (movefn) movefn(cube);
-    }
-    solveMoves.push(move);
-    helper2(cube, move);
+  for (let depth = 1; depth <= 11; depth++) {
+    helper2(cube, "X", depth); // "X" is a dummy last move
     if (isSolved) {
       return solveMoves;
-    }
-    // undo the move
-    solveMoves.pop();
-    for (let t = 0; t < (4 - times) % 4; t++) {
-      if (movefn) movefn(cube);
     }
   }
   return ["No solution found..."];

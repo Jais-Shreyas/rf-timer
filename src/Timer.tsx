@@ -11,7 +11,12 @@ type Solve = {
   verdict: string
 };
 
-export default function Timer() {
+type TimerProps = {
+  theme: 'light' | 'dark';
+  setTheme: React.Dispatch<React.SetStateAction<'light' | 'dark'>>;
+};
+
+export default function Timer({ theme, setTheme }: TimerProps) {
   const [time, setTime] = useState<number>(0);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isHolding, setIsHolding] = useState<boolean>(false);
@@ -265,9 +270,6 @@ export default function Timer() {
     return theme === "dark" ? "text-light" : "text-dark";
   };
 
-  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
-    localStorage.getItem('theme') === 'dark' ? 'dark' : 'light'
-  );
 
   const toggleTheme = () => {
     setTheme((prev) => {
@@ -276,11 +278,6 @@ export default function Timer() {
       return next;
     });
   };
-
-  const width = window.innerWidth;
-  const height = window.innerHeight;
-
-  console.log(`Width: ${width}px, Height: ${height}px`);
 
   const backgroundClass = theme === 'dark' ? 'bg-dark' : getBackground();
   const effectiveTextColor = theme === 'dark' ? 'text-light' : 'text-dark';
@@ -338,8 +335,8 @@ export default function Timer() {
       }}
     >
       <aside
-        className={`${isRunning || isReady ? "d-none" : ""} px-3 pt-3 d-flex flex-row flex-md-column border-top border-md-top-0 border-md-end 
-    ${theme === 'dark' ? 'bg-dark text-light border-dark' : 'bg-white text-dark'}`}
+        className={`${isRunning || isReady ? "d-none" : ""} px-3 pt-3 d-flex flex-row flex-md-column border-top border-md-top-0 border-md-end
+      ${theme === 'dark' ? 'bg-dark text-light border-dark' : 'bg-white text-dark'}`}
       >
         <table className={`table table-hover align-middle text-center mb-0 timer-stats-table ${theme === 'dark' ? 'table-dark' : ''}`}>
           <thead>
@@ -554,7 +551,7 @@ export default function Timer() {
         <h1
           className={`fw-bold ${getTextColor()}`}
           style={{
-            fontSize: '10vw', userSelect: "none",
+            fontSize: `${mode == 2 ? '10vw' : '7vw'}`, userSelect: "none",
             fontFamily: "monospace",
           }}
         >
